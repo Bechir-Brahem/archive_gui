@@ -1,0 +1,9 @@
+[logger]
+
+# Level of logging: 'error', 'warning', 'info', or 'debug'.
+
+# Default: 'info'
+level = "info"
+
+[theme]
+base="light"
