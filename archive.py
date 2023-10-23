@@ -1,15 +1,35 @@
 import os
+from enum import Enum
 from pathlib import Path
 
-email = "julian.heymes@psi.ch"
-name = "Julian Heymes"
-token = "KHA3HTHzEfATR0lUT2l38IJaEKZxsFqy56iV1AcPo4HkH6R1USqf1GaZV36Bekbd"
-token_prefix = "moench_Julian"
-# generated_files_dir = "/afs/psi.ch/user/h/heymes_j/Desktop/tests_archiving/"
-generated_files_dir = "/home/l_msdetect/PSI_data_archive/"
-# base_dir = "/mnt/sls_det_storage/moench_data/Julian/moench04_Julian/"
-base_dir = "/sls_det_arxv/moench_data/Julian/moench04_Julian/"
-commands_file_name = "20230908_JH_ingestion_commands.sh"
+# email = "julian.heymes@psi.ch"
+# name = "Julian Heymes"
+# token = "KHA3HTHzEfATR0lUT2l38IJaEKZxsFqy56iV1AcPo4HkH6R1USqf1GaZV36Bekbd"
+# token_prefix = "moench_Julian"
+# # generated_files_dir = "/afs/psi.ch/user/h/heymes_j/Desktop/tests_archiving/"
+# generated_files_dir = "/home/l_msdetect/PSI_data_archive/"
+# # base_dir = "/mnt/sls_det_storage/moench_data/Julian/moench04_Julian/"
+# base_dir = "/sls_det_arxv/moench_data/Julian/moench04_Julian/"
+# commands_file_name = "20230908_JH_ingestion_commands.sh"
+# name_prefix="moench_Julian"
+
+email = ""
+name = ""
+token = ""
+token_prefix = ""
+generated_files_dir = ""
+base_dir = ""
+commands_file_name = ""
+name_prefix = ""
+
+
+class ArchiveAction(Enum):
+    """
+    Enum for the different actions that can be taken
+    """
+    DRY = 0
+    ARCHIVE = 1
+    INGEST = 2
 
 
 def write_json_and_txt(json_loc,
@@ -20,13 +40,15 @@ def write_json_and_txt(json_loc,
                        user_name,
                        user_email,
                        api_token,
-                       dataset_name_folder_prefix):
+                       dataset_name_folder_prefix,
+                       action=ArchiveAction.DRY
+                       ):
     description_full = f"Description: {description_entry} ------ Folder contents: {' | '.join(contents)}"
     f = open(f"{json_loc}/metadata_{folder_basename}_a-35297.json", "w")
     f.write('{\n')
     f.write(f'    "datasetName": "{dataset_name_folder_prefix}/{folder_basename}",\n')
     f.write(f'    "owner": "{user_name}",\n')
-    f.write(f'    "sourceFolder": "{base_directory}{folder_basename}",\n')
+    f.write(f'    "sourceFolder": "{os.path.join(base_directory, folder_basename)}",\n')
     f.write(f'    "type": "raw",\n')
     f.write(f'    "ownerEmail": "{user_email}",\n')
     f.write(f'    "contactEmail": "{user_email}",\n')
@@ -42,13 +64,16 @@ def write_json_and_txt(json_loc,
         f.write(f"{content}\n")
     f.close()
 
-    # Dry run: /home/l_msdetect/PSI_data_archive/datasetIngestor -noninteractive -token {api_token}
-    # Ingest only: /home/l_msdetect/PSI_data_archive/datasetIngestor -ingest -noninteractive -token {api_token}
-    # Archive : /home/l_msdetect/PSI_data_archive/datasetIngestor -ingest -noninteractive -autoarchive-token {api_token}
+    command_for_script = ""
+    if action == ArchiveAction.DRY:
+        command_for_script = f"/home/l_msdetect/PSI_data_archive/datasetIngestor -noninteractive -token {api_token}"
+    elif action == ArchiveAction.ARCHIVE:
+        command_for_script = f"/home/l_msdetect/PSI_data_archive/datasetIngestor -ingest -noninteractive -token {api_token}"
+    elif action == ArchiveAction.INGEST:
+        command_for_script = f"/home/l_msdetect/PSI_data_archive/datasetIngestor -ingest -noninteractive -autoarchive-token -token {api_token}"
 
-    command_for_script = f"./datasetIngestor -ingest -noninteractive -autoarchive -token {api_token} " \
-                         f"metadata_{folder_basename}_a-35297.json " \
-                         f"filelisting_{folder_basename}.txt \n"
+    command_for_script += f" metadata_{folder_basename}_a-35297.json " \
+                          f"filelisting_{folder_basename}.txt \n"
     return command_for_script
 
 
@@ -62,13 +87,14 @@ def generate_command_for_subfolder(
         folder_name,
         description,
         folder_contents,
+        action=ArchiveAction.DRY
 ):
     """
     Generate archiving files for a subfolder
     """
     print(email)
     cmd = write_json_and_txt(generated_files_dir, base_dir, folder_name, description,
-                             folder_contents, name, email, token, name_prefix)
+                             folder_contents, name, email, token, name_prefix, action=action)
     generate_ingest_script(f"{generated_files_dir}/{commands_file_name}", cmd)
 
 
@@ -80,7 +106,7 @@ def create_command_file():
     f.close()
 
 
-def generate_all(folders):
+def generate_all(folders, action=ArchiveAction.DRY):
     """
     Generate the commands for all the folders
     """
@@ -88,7 +114,7 @@ def generate_all(folders):
         folder_name = Path(folder_path).name
         folder_contents = [Path(file).name for file in folder_data["contents"]]
         description = folder_data["description"]
-        generate_command_for_subfolder(folder_name, description, folder_contents)
+        generate_command_for_subfolder(folder_name, description, folder_contents, action=action)
 
 
 def setup_config(

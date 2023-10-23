@@ -10,6 +10,27 @@ import streamlit as st
 from streamlit_tree_select import tree_select
 import archive
 
+# email = "julian.heymes@psi.ch"
+# username = "Julian Heymes"
+# token = "KHA3HTHzEfATR0lUT2l38IJaEKZxsFqy56iV1AcPo4HkH6R1USqf1GaZV36Bekbd"
+# token_prefix = "moench_Julian"
+# generated_files_dir = "/home/l_msdetect/PSI_data_archive/"
+# base_dir = "/sls_det_arxv/moench_data/Julian/moench04_Julian/"
+# commands_file_name = "20230908_JH_ingestion_commands.sh"
+# name_prefix = "moench_Julian"
+# json_path = ""
+
+
+email = "bb@psi.ch"
+username = "Bechir"
+token = "KHA3HTHzEfATR0lUT2l38IJaEKZxsFqy56iV1AcPo4HkH6R1USqf1GaZV36Bekbd"
+token_prefix = "moench_Julian"
+generated_files_dir = "/tmp/test_archive/01"
+base_dir = "/tmp"
+commands_file_name = "20230908_JH_ingestion_commands.sh"
+name_prefix = "moench_Julian"
+json_path = "/tmp/test_archive/01"
+
 if 'nodes' not in st.session_state:
     st.session_state.nodes = []
 
@@ -19,8 +40,12 @@ if 'depth' not in st.session_state:
 if 'first_level_files' not in st.session_state:
     st.session_state.first_level_files = set()
 
+if 'define_old' not in st.session_state:
+    st.session_state.df_parent_old = pd.DataFrame()
+    st.session_state.df_sublevel_old = pd.DataFrame()
+    st.session_state.define_old = True
 
-# recursive function that goes through the folders and subfolders
+
 def _update_folders(path, depth):
     if depth <= 0:
         return
@@ -42,7 +67,7 @@ def _update_folders(path, depth):
 
 
 def update_folders():
-    root_path = Path(st.session_state.data_path)
+    root_path = Path(data_path)
     st.session_state.first_level_files = set(root_path.glob('*'))
 
     st.session_state.nodes = []
@@ -51,29 +76,32 @@ def update_folders():
 
 c1, c2 = st.columns([3, 1])
 with c1:
-    data_path = st.text_input('Base Directory', on_change=update_folders, key='data_path', value='/sls_det_arxv/')
+    data_path = st.text_input('Base Directory', key='data_path', value=base_dir)
 with c2:
     depth = st.number_input('Enter depth', value=2, key='depth', on_change=update_folders, disabled=True)
+# recursive function that goes through the folders and subfolders
 
-json_path = st.text_input('Enter path to json file', )
+json_path = st.text_input('Enter path to json file', value=json_path)
 
 # job_description = st.text_input('Enter job description')
 
-name_prefix = st.text_input('Enter name prefix')
+name_prefix = st.text_input('Enter name prefix', value=name_prefix)
 
-command_file_name = st.text_input('Enter command file name')
+command_file_name = st.text_input('Enter command file name', value=commands_file_name)
 
 c1, c2 = st.columns(2)
 with c1:
-    username = st.text_input('Enter username')
+    username = st.text_input('Enter username', value=username)
 with c2:
-    email = st.text_input('Enter email')
+    email = st.text_input('Enter email', value=email)
 
-token = st.text_input('Enter token')
+token = st.text_input('Enter token', value=token)
 
+update_folders()
 return_select = tree_select(st.session_state.nodes)
-df = pd.DataFrame()
 
+df_sublevel = pd.DataFrame()
+df_parent = pd.DataFrame()
 if return_select['checked']:
     top_level = set()
 
@@ -85,14 +113,20 @@ if return_select['checked']:
             top_level.add(str(path.parent))
         elif path in st.session_state.first_level_files:
             top_level.add(str(path))
-    df1 = pd.DataFrame(
+
+    df_parent = pd.DataFrame(
         {
             "name": list(top_level),
             "description": "" * len(top_level),
         }
     )
-    df1 = st.data_editor(
-        df1,
+
+    # for index, row in st.session_state.df_parent_old.iterrows():
+    #     if row['name'] in top_level:
+    #         df_parent.loc[df_parent['name'] == row['name'], 'description'] = row['description']
+    # st.session_state.df_parent_old = df_parent.copy()
+    df_parent = st.data_editor(
+        df_parent,
         column_config={
             "description": st.column_config.TextColumn()
         },
@@ -103,15 +137,20 @@ if return_select['checked']:
     sub_level = list(set(return_select['checked']) - top_level)
 
     if sub_level:
-        df = pd.DataFrame(
+        df_sublevel = pd.DataFrame(
             {
                 "name": sub_level,
                 "selected": [False] * len(sub_level),
             }
         )
+        # for index, row in st.session_state.df_sublevel_old.iterrows():
+        #     if row['name'] in sub_level:
+        #         df_sublevel.loc[df_sublevel['name'] == row['name'], 'selected'] = row['selected']
+        #
+        # st.session_state.df_sublevel_old = df_sublevel.copy()
 
-        df = st.data_editor(
-            df,
+        df_sublevel = st.data_editor(
+            df_sublevel,
             column_config={
                 "selected": st.column_config.CheckboxColumn()
             },
@@ -130,16 +169,17 @@ with c3:
 
 def generate_folders():
     folders = {}
-    for index, row in df1.iterrows():
+    for index, row in df_parent.iterrows():
         folders[row['name']] = {"description": row['description']}
 
-    for index, row in df.iterrows():
+    for index, row in df_sublevel.iterrows():
         if row['selected']:
             parent = str(Path(row['name']).parent)
             if 'contents' not in folders[parent]:
                 folders[parent]['contents'] = []
             folders[parent]['contents'].append(row['name'])
     return folders
+
 
 def validate_fields():
     if not username:
@@ -168,15 +208,32 @@ def validate_fields():
     #     return False
     return True
 
-if dry:
-    print("Dry Run")
-    print(data_path)
-    if validate_fields():
-        print('json_path',json_path)
-        archive.setup_config(email, username, token, name_prefix, json_path, data_path,command_file_name)
-        archive.create_command_file()
-        folders = generate_folders()
-        print(folders)
-        archive.generate_all(folders)
 
+def setup():
+    if validate_fields():
+        archive.setup_config(email, username, token, name_prefix, json_path, data_path, command_file_name)
+        archive.create_command_file()
+        return generate_folders()
+    return None
+
+
+if dry:
+    folders = setup()
+    if folders:
+        archive.generate_all(folders, action=archive.ArchiveAction.DRY)
+
+if ingest:
+    folders = setup()
+    if folders:
+        archive.generate_all(folders, action=archive.ArchiveAction.INGEST)
+
+if archive_btn:
+    folders = setup()
+    if folders:
+        archive.generate_all(folders, action=archive.ArchiveAction.ARCHIVE)
+
+if Path(f"{generated_files_dir}/{commands_file_name}").exists():
+    st.divider()
+    st.text("commands file: ")
+    st.code(Path(f"{generated_files_dir}/{commands_file_name}").read_text())
 
